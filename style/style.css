@@ -1,0 +1,82 @@
+QMainWindow {
+    font-family: "Poppins";
+    background-color: #0E3345;
+}
+
+QMessageBox {
+    font-family: "Poppins";
+    background-color: #193C4D;
+}
+
+QFrame {
+    background-color: #193C4D;
+    padding: 4px 20px;
+    border-radius: 20px;
+    border-width: 1px;
+    border-color: #2A4959;
+    border-style: solid;
+}
+
+QLabel {
+    font-family: "Poppins";
+    font-size:14px;
+    color: #C0C8CFFF;
+    padding: 5px;
+    border: none;
+}
+
+QSpinBox {
+    font-family: "Poppins";
+    font-size: 16px;
+    background-color: #30505F;
+    color: #ffffff;
+    border: none;
+    padding: 4px 20px;
+    border-radius: 18px;
+}
+
+QLineEdit {
+    font-family: "Poppins";
+    font-size: 16px;
+    background-color: #30505F;
+    color: #ffffff;
+    border: none;
+    padding: 4px 20px;
+    border-radius: 18px;
+}
+
+QComboBox {
+    font-family: "Poppins";
+    font-size: 16px;
+    background-color: #0F3446;
+    color: #ffffff;
+    border-width: 1px;
+    border-color: #1F4152FF;
+    border-style: solid;
+    padding: 4px 20px;
+    border-radius: 6px;
+}
+
+QComboBox:items{
+    color: #ffffff;
+}
+
+QListView{
+    color: #ffffff;
+}    
+
+QPushButton {
+    color: #ffffff;
+    background-color: #57CBCC;
+    border-style: outset;
+    border: none;
+    font: 20px;
+    padding: 4px 15px;
+    border-radius: 6px;
+}
+QPushButton:pressed {
+    background-color: #1b5152;
+    border-width: 2px;
+    border-color: #ffffff;
+    border-style: inset;
+}

@@ -1,0 +1,87 @@
+#! /usr/bin/env python3
+
+import argparse
+import sys
+from getpass import getpass
+from spectre import Spectre, SpectreError
+from os import path
+try:
+    import clipboard
+    use_clipboard = True
+except:
+    use_clipboard = False
+
+class color:
+    BOLD = '\033[1m'
+    END = '\033[0m'
+
+# Retrieve arguments
+parser = argparse.ArgumentParser(description=color.BOLD + 'PASSWORD' + color.END)
+parser.add_argument("site", help="")
+parser.add_argument('--context', help='Records file context', default ='')
+parser.add_argument("--username", help="Spectre username")
+parser.add_argument('--auto', help='automatically load parameters from file', action='store_true')
+parser.add_argument('--counter', help='counter', type=int, default=1)
+parser.add_argument('--scheme', help='Password scheme to generate', default='max')
+args = parser.parse_args()
+
+# Get master secret
+secret = getpass('Please enter you master secret: ')
+
+# Compute password
+spectre = Spectre()
+
+# Load stored records
+if args.context:
+    try:
+        with open(path.join(path.dirname(__file__), args.context)) as f:
+            records_file = f.readlines()[0].strip()
+        spectre.load_records(records_file)
+    except:
+        print('Error: failed to load context records')
+        sys.exit(1)
+
+    args.username = path.splitext(path.basename(records_file))[0]
+
+try:
+    if args.auto:
+        password = spectre.auto_compute_password(args.username, secret, args.site)
+    else:
+        password = spectre.compute_password(args.username, secret, args.site, args.counter, args.scheme)
+except SpectreError as e:
+    print('Error:', e)
+    sys.exit(1)
+
+# Output password
+print()
+print('----------------------------------------')
+print(' username |', spectre.username)
+print('----------------------------------------')
+print('     site |', spectre.site)
+print('   scheme |', spectre.scheme)
+print('  counter |', spectre.counter)
+print('----------------------------------------')
+
+if use_clipboard:
+    print(' password |', password[0] + ("*" * (len(password) - 1)), "(copied in your clipboard)")
+    clipboard.copy(password)
+else:
+    print(' password |', password, '(please consider installing \"clipboard\" package)')
+print('----------------------------------------')
+print()
+
+# Check if records can by stored
+if spectre.is_updated():
+    store = input('\nRecords updated. Do you want to save them (Y/n) ? ')
+    if len(store) == 0 or store[0].lower() != 'n':
+        secret = getpass('Please verify master secret: ')
+        try:
+            if args.auto:
+                password = spectre.auto_compute_password(args.username, secret, args.site)
+            else:
+                password = spectre.compute_password(args.username, secret, args.site, args.counter, args.scheme)
+        except SpectreError as e:
+            print('Error:', e)
+            sys.exit(1)
+        spectre.save_records()
+        print('Updated records saved')

@@ -1,0 +1,197 @@
+#! /usr/bin/env python3
+
+import sys
+
+from PyQt5 import QtWidgets, QtCore, QtGui
+from qtwidgets import PasswordEdit
+import clipboard
+from os import path
+from spectre import Spectre, SpectreError
+
+try:
+    import ctypes
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(u'spectre.spectre.gui.1')
+except:
+    pass
+
+class SpectreWindow(QtWidgets.QMainWindow):
+
+    records_file = 'username.json'
+
+    def __init__(self, context = None):
+        super(SpectreWindow, self).__init__()
+
+        self.setWindowTitle("Spectre")
+        self.main_layout = QtWidgets.QHBoxLayout()
+        self.layout = QtWidgets.QVBoxLayout()
+
+        if context:
+            try:
+                with open(path.join(path.dirname(__file__), context)) as f:
+                    self.records_file = f.readlines()[0]
+            except Exception as e:
+                print('Error: failed to load context records', e)
+                sys.exit(1)
+        else:
+            self.records_file = SpectreWindow.records_file
+
+        username = path.splitext(path.basename(self.records_file))[0]
+
+        self.username_text = QtWidgets.QLineEdit()
+        self.username_text.setText(username)
+ 
+        self.site_text = QtWidgets.QLineEdit()
+        self.site_combo = QtWidgets.QComboBox()
+
+        self.params_scheme_combo = QtWidgets.QComboBox()
+        self.params_scheme_combo.addItems(Spectre.TEMPLATES.keys())
+        self.params_counter_spinbox = QtWidgets.QSpinBox()
+        self.params_counter_spinbox.setMinimum(1)
+        self.params_counter_spinbox.setMaximum(1000)
+        self.params_layout = self.setup_parameters([('Counter', self.params_counter_spinbox),
+                                                    ('Scheme', self.params_scheme_combo)])
+
+        self.compute_button = QtWidgets.QPushButton('Compute')
+        self.compute_label = QtWidgets.QLabel()
+        self.compute_label.setFixedHeight(28)
+
+        self.secret_text = PasswordEdit()
+
+        self.add_icon()
+        self.add_section(' 👤 USERNAME', [self.username_text])
+        self.add_section(' 🌐 SITE', [self.site_combo, self.site_text])
+        self.add_layout(' ⚙️ PARAMETERS', self.params_layout)
+        self.add_section(' 🔑 SECRET', [self.secret_text])
+        self.add_section('COMPUTE', [self.compute_button, self.compute_label])
+
+        self.main_layout.addItem(QtWidgets.QSpacerItem(200, 800, QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed))
+        frame = QtWidgets.QFrame()
+        frame.setLayout(self.layout)
+        self.main_layout.addWidget(frame)
+        self.main_layout.addItem(QtWidgets.QSpacerItem(200, 800, QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed))
+        widget = QtWidgets.QWidget()
+        widget.setLayout(self.main_layout)
+        self.setCentralWidget(widget)
+        self.setFixedWidth(1000)
+        self.setFixedHeight(800)
+
+        self.site_combo.currentTextChanged.connect(self.site_selected)
+        self.site_text.textChanged.connect(self.site_changed)
+        self.compute_button.clicked.connect(self.compute_password)
+
+        self.spectre = Spectre()
+        self.load_records()
+
+    def load_records(self):
+        self.spectre.load_records(self.records_file)
+        self.site_combo.clear()
+        self.site_combo.addItem("")
+        sites = list(self.spectre.get_records_parameters().keys())
+        sites.sort()
+        self.site_combo.addItems(sites)
+        self.params_counter_spinbox.setValue(1)
+        self.params_scheme_combo.setCurrentIndex(0)
+
+    def setup_parameters(self, parameters):
+        grid = QtWidgets.QGridLayout()
+        row = 0
+        for name, widget in parameters:
+            grid.setColumnMinimumWidth(1, 400)
+            label = QtWidgets.QLabel(name)
+            label.setAlignment(QtCore.Qt.AlignRight)
+            grid.addWidget(label, row, 0)
+            grid.addWidget(widget, row, 1)
+            row = row + 1
+        return grid
+    
+    def add_icon(self):
+        title = QtWidgets.QLabel()
+        title.setText("Spectre")
+        title.setAlignment(QtCore.Qt.AlignCenter)
+        title.setStyleSheet("color: #ffffff; font-size:22px;")
+        self.layout.addWidget(title)
+        label = QtWidgets.QLabel()
+        label.setPixmap(QtGui.QPixmap(path.join(path.dirname(__file__), 'img', 'icon_64x64.png')))
+        label.setAlignment(QtCore.Qt.AlignCenter)
+        self.layout.addWidget(label)
+
+    def add_section(self, name, widgets):
+        self.layout.addItem(QtWidgets.QSpacerItem(10, 20, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding))
+        self.layout.addWidget(QtWidgets.QLabel(name))
+        for w in widgets:
+            self.layout.addWidget(w)
+
+    def add_layout(self, name, layout):
+        self.layout.addItem(QtWidgets.QSpacerItem(10, 20, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding))
+        self.layout.addWidget(QtWidgets.QLabel(name))
+        self.layout.addLayout(layout)
+
+    def site_selected(self, site):
+        self.site_text.setText(site)
+
+    def site_changed(self, site):
+        if site in self.spectre.get_records_parameters():
+            parameters = self.spectre.get_records_parameters()[site]
+            self.params_counter_spinbox.setValue(parameters['counter'])
+            self.params_scheme_combo.setCurrentText(parameters['scheme'])
+            self.display_success(f'Parameters loaded for {site}')
+        else:
+            self.display_nothing()
+
+    def compute_password(self):
+        if len(self.secret_text.text()) and len(self.site_text.text()):
+            try:
+                password = self.spectre.compute_password(self.username_text.text(), self.secret_text.text(), self.site_text.text(),
+                                                         self.params_counter_spinbox.value(), self.params_scheme_combo.currentText())
+                clipboard.copy(password)
+                self.display_success(f"Password {password[0] + ('*' * (len(password) - 1))} (copied in your clipboard)")
+            except SpectreError as e:
+                self.display_error(str(e))
+            # Check if records can by stored
+            if self.spectre.is_updated():
+                ret = QtWidgets.QMessageBox.question(self, '', "Records updated. Do you want to save them ?", QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No)
+                if ret == QtWidgets.QMessageBox.Yes:
+                    self.spectre.save_records()
+                    self.display_success(f'Records successfully saved.')
+                self.load_records()
+        else:
+            self.display_error('Invalid input length')
+
+    def display_nothing(self):
+        self.compute_label.setText('')
+        self.compute_label.setStyleSheet(f'border: none')
+
+    def display_success(self, message):
+        self.compute_label.setAlignment(QtCore.Qt.AlignCenter)
+        self.compute_label.setStyleSheet(f'color: #96BE78; border: 2px solid #96BE78')
+        self.compute_label.setText(message)
+
+    def display_error(self, message):
+        self.compute_label.setAlignment(QtCore.Qt.AlignCenter)
+        self.compute_label.setStyleSheet(f'color: #B06060; border: 2px solid #B06060')
+        self.compute_label.setText(message)
+
+if __name__ == '__main__':
+    # create the application and the main window
+    app = QtWidgets.QApplication(sys.argv)
+
+    app_icon = QtGui.QIcon()
+    app_icon.addFile(path.join(path.dirname(__file__), 'img', 'icon_16x16.png'), QtCore.QSize(16, 16))
+    app_icon.addFile(path.join(path.dirname(__file__), 'img', 'icon_24x24.png'), QtCore.QSize(24, 24))
+    app_icon.addFile(path.join(path.dirname(__file__), 'img', 'icon_32x32.png'), QtCore.QSize(32, 32))
+    app_icon.addFile(path.join(path.dirname(__file__), 'img', 'icon_48x48.png'), QtCore.QSize(48, 48))
+    app_icon.addFile(path.join(path.dirname(__file__), 'img', 'icon_64x64.png'), QtCore.QSize(64, 64))
+    app_icon.addFile(path.join(path.dirname(__file__), 'img', 'icon_256x256.png'), QtCore.QSize(256, 256))
+    app.setWindowIcon(app_icon)
+
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID('spectre.gui.1')
+
+    with open(path.join(path.dirname(__file__), 'style', 'style.css'), 'r') as f:
+        app.setStyleSheet(f.read())
+    if len(sys.argv) > 1:
+        context = sys.argv[1]
+    else:
+        context = None
+    gui = SpectreWindow(context)
+    gui.show()
+    app.exec_()
